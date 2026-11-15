@@ -1,0 +1,461 @@
+<title>懶人待辦模擬器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面：左邊一支 iPhone（可切 App／桌面），右邊是「模擬簽名結果」控制台；手機寬度時上下堆疊 */
+:root {
+  --bg: #eef1f5; --fg: #17202b; --muted: #5a6573; --panel: #ffffff; --line: #d5dbe3;
+  --accent: #2f5bd3; --on-accent: #ffffff; --soft: #e6ecfa;
+  --frame: #1a1c20;
+  --ios-bg: #f2f2f7; --ios-cell: #ffffff; --ios-fg: #000000; --ios-sec: #8a8a8e; --ios-sep: #d1d1d6;
+  --ios-tint: #007aff; --ios-red: #ff3b30; --ios-green: #34c759;
+  --wall: linear-gradient(165deg, #93b2da 0%, #bfaedb 55%, #ecc6ae 100%);
+  --widget: rgba(255,255,255,.84); --banner: rgba(246,246,248,.94); --scrim: rgba(0,0,0,.28);
+  --font-ui: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-display: "Space Grotesk", "Noto Sans TC", system-ui, sans-serif;
+  --font-ios: -apple-system, "SF Pro Text", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1218; --fg: #e5eaf0; --muted: #94a0ae; --panel: #161c24; --line: #2a333e;
+  --accent: #7f9cff; --on-accent: #0b1020; --soft: #1e2840;
+  --ios-bg: #000000; --ios-cell: #1c1c1e; --ios-fg: #ffffff; --ios-sec: #8d8d93; --ios-sep: #38383a;
+  --ios-tint: #0a84ff; --ios-red: #ff453a; --ios-green: #30d158;
+  --wall: linear-gradient(165deg, #1c2a44 0%, #3a2c52 55%, #5b3a39 100%);
+  --widget: rgba(30,30,32,.86); --banner: rgba(44,44,48,.94); --scrim: rgba(0,0,0,.5);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1218; --fg: #e5eaf0; --muted: #94a0ae; --panel: #161c24; --line: #2a333e;
+  --accent: #7f9cff; --on-accent: #0b1020; --soft: #1e2840;
+  --ios-bg: #000000; --ios-cell: #1c1c1e; --ios-fg: #ffffff; --ios-sec: #8d8d93; --ios-sep: #38383a;
+  --ios-tint: #0a84ff; --ios-red: #ff453a; --ios-green: #30d158;
+  --wall: linear-gradient(165deg, #1c2a44 0%, #3a2c52 55%, #5b3a39 100%);
+  --widget: rgba(30,30,32,.86); --banner: rgba(44,44,48,.94); --scrim: rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.intro { max-width: 960px; margin: 0 auto 24px; }
+.intro h1 { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.25; margin: 0 0 6px; text-wrap: balance; }
+.intro p { margin: 0; color: var(--muted); max-width: 62ch; }
+
+.stage { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 370px) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 780px) { .stage { grid-template-columns: minmax(0, 1fr); justify-items: center; } .panel { width: 100%; } }
+.phone-col { display: grid; gap: 14px; justify-items: center; width: 100%; }
+
+/* ---------- 分段切換 ---------- */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; color: var(--fg); padding: 7px 14px; font-size: .9rem; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 500; }
+
+/* ---------- iPhone ---------- */
+.phone { width: min(100%, 350px); aspect-ratio: 430 / 932; max-width: 100%; background: var(--frame); border-radius: 52px; padding: 11px; box-shadow: 0 18px 40px rgba(10,20,40,.22); }
+.screen { position: relative; height: 100%; border-radius: 42px; overflow: hidden; background: var(--ios-bg); color: var(--ios-fg); font-family: var(--font-ios); font-size: 15px; line-height: 1.35; }
+.statusbar { position: absolute; inset: 0 0 auto; height: 48px; display: flex; justify-content: space-between; align-items: center; padding: 0 28px; font-weight: 600; font-size: 14px; z-index: 15; pointer-events: none; font-variant-numeric: tabular-nums; }
+.island { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 34%; height: 28px; background: #000; border-radius: 20px; }
+.battery { width: 24px; height: 11px; border: 1.5px solid currentColor; border-radius: 3.5px; padding: 1px; opacity: .9; }
+.battery i { display: block; height: 100%; width: 72%; background: currentColor; border-radius: 1.5px; }
+.screen.on-home .statusbar { color: #fff; }
+
+.view { position: absolute; inset: 0; }
+.app { padding: 48px 0 34px; overflow-y: auto; overscroll-behavior: contain; }
+.largetitle { font-size: 26px; font-weight: 700; margin: 6px 18px 2px; letter-spacing: -.01em; }
+.gh { color: var(--ios-sec); font-size: 12.5px; padding: 18px 30px 6px; }
+.gf { color: var(--ios-sec); font-size: 11.5px; padding: 6px 30px 0; white-space: pre-line; }
+.grp { margin: 0 14px; background: var(--ios-cell); border-radius: 11px; overflow: hidden; }
+.cell { padding: 10px 15px; position: relative; }
+.grp > * + * { border-top: .5px solid var(--ios-sep); }
+.row { display: flex; gap: 10px; align-items: center; }
+.row input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ios-fg); font: inherit; padding: 2px 0; }
+.row input::placeholder { color: var(--ios-sec); }
+.tint { background: none; border: 0; color: var(--ios-tint); padding: 0; text-align: left; }
+.tint:disabled { color: var(--ios-sec); cursor: default; }
+button.cell.tint { display: block; width: 100%; padding: 11px 15px; }
+.empty { color: var(--ios-sec); }
+.small { font-size: 12.5px; }
+.sub { display: block; color: var(--ios-sec); font-size: 11.5px; word-break: break-all; margin-top: 1px; }
+
+.swipe { position: relative; overflow: hidden; padding: 0; }
+.swipe .del { position: absolute; top: 0; right: 0; bottom: 0; width: 84px; border: 0; background: var(--ios-red); color: #fff; font-weight: 500; }
+.swipe .sc { position: relative; background: var(--ios-cell); padding: 10px 15px; transition: transform .22s ease; touch-action: pan-y; user-select: none; cursor: grab; }
+
+/* ---------- 桌面 ---------- */
+.home { background: var(--wall); padding: 58px 20px 30px; }
+.hgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 14px; }
+.widget { background: var(--widget); color: var(--ios-fg); border-radius: 22px; padding: 13px 14px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.w-small { grid-column: span 2; grid-row: span 2; }
+.w-medium { grid-column: span 4; aspect-ratio: 2.12; }
+.widget .wt { font-weight: 700; font-size: 14px; }
+.widget .wl { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.widget .wmsg { font-size: 11.5px; color: var(--ios-sec); }
+.widget .werr { font-size: 11.5px; color: var(--ios-red); }
+.wcap { grid-column: span 2; text-align: center; color: #fff; font-size: 11px; margin-top: -10px; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.wcap.wide { grid-column: span 4; }
+.icon { display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; color: #fff; font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.glyph { width: 100%; max-width: 60px; aspect-ratio: 1; border-radius: 23%; display: grid; place-items: center; font-size: 26px; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.g-app { background: linear-gradient(150deg, #4f8cff, #2f5bd3); color: #fff; }
+.g-plain { background: rgba(255,255,255,.55); color: rgba(0,0,0,.45); font-size: 20px; }
+
+/* ---------- 通知與對話框 ---------- */
+.banner { position: absolute; top: 50px; left: 8px; right: 8px; z-index: 20; background: var(--banner); color: var(--ios-fg); border: 0; text-align: left; border-radius: 20px; padding: 11px 13px; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 2px 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); user-select: none; touch-action: none; animation: drop .35s ease; }
+.banner .bi { grid-row: span 2; width: 34px; height: 34px; border-radius: 8px; font-size: 16px; }
+.banner .bt { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 13.5px; }
+.banner .bt span { font-weight: 400; color: var(--ios-sec); font-size: 12px; }
+.banner .bb { font-size: 13px; }
+@keyframes drop { from { transform: translateY(-120%); } to { transform: none; } }
+
+.overlay { position: absolute; inset: 0; z-index: 30; background: var(--scrim); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; flex-direction: column; gap: 10px; padding: 70px 12px 20px; }
+.overlay .banner { position: static; animation: none; box-shadow: none; }
+.menu { background: var(--banner); border-radius: 14px; overflow: hidden; width: 78%; }
+.menu button { display: block; width: 100%; border: 0; background: none; color: var(--ios-fg); text-align: left; padding: 12px 16px; font-size: 15px; }
+.menu button + button { border-top: .5px solid var(--ios-sep); }
+.overlay.center { justify-content: center; align-items: center; padding: 20px; }
+.alert { width: 76%; background: var(--banner); border-radius: 14px; text-align: center; overflow: hidden; }
+.alert h3 { margin: 0; padding: 18px 16px 4px; font-size: 15px; }
+.alert p { margin: 0; padding: 0 16px 16px; font-size: 12.5px; color: var(--ios-fg); }
+.alert .ab { display: grid; grid-template-columns: 1fr 1fr; border-top: .5px solid var(--ios-sep); }
+.alert .ab button { border: 0; background: none; color: var(--ios-tint); padding: 11px; font-size: 15px; }
+.alert .ab button + button { border-left: .5px solid var(--ios-sep); font-weight: 600; }
+
+.homebar { position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); width: 40%; height: 20px; border: 0; background: none; z-index: 25; padding: 0; }
+.homebar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 5px; height: 5px; border-radius: 3px; background: var(--ios-fg); opacity: .85; }
+.screen.on-home .homebar::after { background: #fff; }
+
+/* ---------- 控制台 ---------- */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: grid; gap: 22px; min-width: 0; }
+.panel h2 { font-family: var(--font-display); font-size: 1.05rem; margin: 0 0 4px; }
+.panel .hint { color: var(--muted); font-size: .86rem; margin: 6px 0 0; }
+.ctl { display: grid; gap: 10px; }
+.ctl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ctl-row > span { min-width: 6.5em; color: var(--muted); font-size: .9rem; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 8px; padding: 6px 12px; font-size: .9rem; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.status { background: var(--soft); border-radius: 10px; padding: 10px 12px; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.guide { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: .9rem; }
+.guide b { font-weight: 600; }
+.footnote { color: var(--muted); font-size: .82rem; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) { .banner, .swipe .sc { animation: none; transition: none; } }
+</style>
+
+<div class="intro">
+  <h1>懶人待辦 試水溫版・網頁模擬器</h1>
+  <p>照剛寫好的 App 畫面做的網頁模擬，可以直接點：新增待辦、左滑刪除、切到桌面看小工具、按「10 秒後提醒我」再長按通知。右邊可以假裝簽名出問題，看診斷區和小工具會變成什麼樣子。</p>
+</div>
+
+<main class="stage">
+  <div class="phone-col">
+    <div class="seg" role="group" aria-label="切換手機畫面">
+      <button id="tabApp" type="button">App 畫面</button>
+      <button id="tabHome" type="button">桌面小工具</button>
+    </div>
+    <div class="phone">
+      <div class="screen" id="screen">
+        <div class="statusbar"><span id="clock">9:41</span><span class="island"></span><span class="battery"><i></i></span></div>
+
+        <section class="view app" id="appView" aria-label="App 畫面">
+          <h2 class="largetitle">懶人待辦（試水溫）</h2>
+          <div class="gh">新增</div>
+          <div class="grp"><div class="cell row">
+            <input id="newText" type="text" placeholder="想記什麼？" autocomplete="off">
+            <button id="addBtn" class="tint" type="button">新增</button>
+          </div></div>
+          <div class="gh" id="listHead"></div>
+          <div class="grp" id="list"></div>
+          <div class="gh">診斷區（請截圖回報）</div>
+          <div class="grp" id="diag"></div>
+          <div class="gf" id="diagFoot"></div>
+          <div class="gh">通知測試</div>
+          <div class="grp">
+            <button id="remindBtn" class="cell tint" type="button">10 秒後提醒我</button>
+            <div class="cell small" id="remindMsg" hidden></div>
+            <div class="cell" id="lastAction"></div>
+          </div>
+        </section>
+
+        <section class="view home" id="homeView" aria-label="桌面" hidden>
+          <div class="hgrid">
+            <div class="widget w-small" id="wSmall"></div>
+            <button class="icon" type="button" id="openApp"><span class="glyph g-app">✓</span>懶人待辦</button>
+            <div class="icon" aria-hidden="true"><span class="glyph g-plain">◐</span>天氣</div>
+            <div class="icon" aria-hidden="true"><span class="glyph g-plain">▦</span>行事曆</div>
+            <div class="icon" aria-hidden="true"><span class="glyph g-plain">✎</span>備忘錄</div>
+            <div class="wcap">小尺寸</div><div class="wcap" aria-hidden="true"></div>
+            <div class="widget w-medium" id="wMedium"></div>
+            <div class="wcap wide">中尺寸</div>
+          </div>
+        </section>
+
+        <button class="banner" id="banner" type="button" hidden aria-label="通知：按一下打開 App，按住不放顯示按鈕">
+          <span class="glyph g-app bi">✓</span>
+          <span class="bt">懶人待辦 測試提醒<span>現在</span></span>
+          <span class="bb">長按這則通知，試試下面的兩個按鈕</span>
+        </button>
+
+        <div class="overlay" id="actions" hidden>
+          <div class="banner" aria-hidden="true">
+            <span class="glyph g-app bi">✓</span>
+            <span class="bt">懶人待辦 測試提醒<span>現在</span></span>
+            <span class="bb">長按這則通知，試試下面的兩個按鈕</span>
+          </div>
+          <div class="menu">
+            <button type="button" id="actDone">✅ 做完了</button>
+            <button type="button" id="actSnooze">⏰ 明天再說</button>
+          </div>
+        </div>
+
+        <div class="overlay center" id="perm" hidden>
+          <div class="alert" role="alertdialog" aria-labelledby="permTitle">
+            <h3 id="permTitle">「懶人待辦」想要傳送通知</h3>
+            <p>通知可能包含提示、聲音和圖像標記。你可以在「設定」中設定。</p>
+            <div class="ab"><button type="button" id="permNo">不允許</button><button type="button" id="permYes">允許</button></div>
+          </div>
+        </div>
+
+        <button class="homebar" id="homeBar" type="button" aria-label="回到桌面"></button>
+      </div>
+    </div>
+  </div>
+
+  <aside class="panel" aria-label="模擬控制台">
+    <div>
+      <h2>現在發生什麼事</h2>
+      <div class="status" id="status">打開 App 了。試著新增一筆，或按「10 秒後提醒我」。</div>
+    </div>
+
+    <div class="ctl">
+      <h2>假裝簽名的結果</h2>
+      <div class="ctl-row"><span>App Group</span>
+        <div class="seg" role="group" aria-label="App Group">
+          <button type="button" id="agOk">正常</button><button type="button" id="agBad">被弄壞</button>
+        </div></div>
+      <div class="ctl-row"><span>Bundle ID</span>
+        <div class="seg" role="group" aria-label="Bundle ID">
+          <button type="button" id="bidOk">沒被改</button><button type="button" id="bidBad">被改掉</button>
+        </div></div>
+      <p class="hint">App Group 壞掉時，診斷區第二行還是 ✅，因為 App 自己寫、自己讀得回來。真正要看的是第一行，還有桌面小工具。</p>
+    </div>
+
+    <div class="ctl">
+      <h2>通知</h2>
+      <div class="ctl-row"><span>倒數長度</span>
+        <div class="seg" role="group" aria-label="倒數長度">
+          <button type="button" id="d10">10 秒（照實）</button><button type="button" id="d3">3 秒（快轉）</button>
+        </div></div>
+      <div class="ctl-row">
+        <button type="button" class="btn" id="resetPerm">重設通知權限</button>
+        <button type="button" class="btn primary" id="pressBanner" hidden>模擬長按通知</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <h2>資料</h2>
+      <div class="ctl-row">
+        <button type="button" class="btn" id="clearAll">清空清單</button>
+        <button type="button" class="btn" id="sample">放回範例</button>
+      </div>
+    </div>
+
+    <div>
+      <h2>照著真機會做的順序試一次</h2>
+      <ol class="guide">
+        <li>在 App 新增兩三筆，看<b>清單</b>和<b>診斷區</b>。</li>
+        <li>切到<b>桌面小工具</b>，看小、中兩個小工具有沒有列出最新 3 筆。</li>
+        <li>回 App 按<b>10 秒後提醒我</b>，第一次會問要不要允許通知。</li>
+        <li>通知跳出來後<b>按住不放</b>，選「做完了」或「明天再說」。</li>
+        <li>回 App 看<b>上次收到</b>有沒有變。</li>
+      </ol>
+    </div>
+
+    <p class="footnote">這是網頁模擬，畫面接近但不等於真機；資料只存在這個分頁，重新整理就回到範例。真的 App 能不能用，還是要等 GitHub 編譯、簽名、裝到 iPhone 才知道。</p>
+  </aside>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const SAMPLE = ['交統計作業（TronClass）', '還小明 200 元', '買影印卡'];
+  const S = {
+    items: SAMPLE.slice(), appGroup: true, bundleChanged: false,
+    notif: 'notDetermined', lastAction: '', remindMsg: '',
+    delay: 10, left: 0, timer: null, screen: 'app'
+  };
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = () => { const d = new Date(); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+  const say = (t) => { $('status').textContent = t; };
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  function tickClock() { const d = new Date(); $('clock').textContent = `${d.getHours()}:${pad(d.getMinutes())}`; }
+
+  // ---------- 清單列（左滑刪除，點一下也能露出刪除鈕） ----------
+  function makeRow(text, idx) {
+    const wrap = el('div', 'swipe');
+    const del = el('button', 'del', '刪除'); del.type = 'button'; del.tabIndex = -1;
+    del.addEventListener('click', () => { S.items.splice(idx, 1); say(`刪掉「${text}」，小工具也會跟著更新。`); render(); });
+    const c = el('div', 'sc', text); c.tabIndex = 0;
+    let startX = null, base = 0, cur = 0, moved = 0;
+    const set = (x) => { cur = x; c.style.transform = `translateX(${x}px)`; del.tabIndex = x < 0 ? 0 : -1; };
+    c.addEventListener('pointerdown', (e) => { startX = e.clientX; base = cur; moved = 0; c.setPointerCapture(e.pointerId); c.style.transition = 'none'; });
+    c.addEventListener('pointermove', (e) => { if (startX === null) return; const dx = e.clientX - startX; moved = Math.max(moved, Math.abs(dx)); set(Math.max(-84, Math.min(0, base + dx))); });
+    const end = () => { if (startX === null) return; startX = null; c.style.transition = ''; if (moved < 4) set(cur < 0 ? 0 : -84); else set(cur < -40 ? -84 : 0); };
+    c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+    c.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(cur < 0 ? 0 : -84); } });
+    wrap.append(del, c);
+    return wrap;
+  }
+
+  function diagRow(ok, title, detail) {
+    const c = el('div', 'cell');
+    c.append(el('span', null, `${ok ? '✅' : '❌'} ${title}`), el('span', 'sub', detail));
+    return c;
+  }
+
+  function fillWidget(box) {
+    box.replaceChildren(el('div', 'wt', '懶人待辦'));
+    if (!S.appGroup) box.append(el('div', 'werr', '❌ 讀不到 App 資料（App Group 失敗）'));
+    else if (!S.items.length) box.append(el('div', 'wmsg', '還沒有東西，去 App 裡新增一筆'));
+    else S.items.slice(0, 3).forEach((t) => box.append(el('div', 'wl', `• ${t}`)));
+  }
+
+  function render() {
+    // 畫面切換
+    const onApp = S.screen === 'app';
+    $('appView').hidden = !onApp; $('homeView').hidden = onApp;
+    $('screen').classList.toggle('on-home', !onApp);
+    $('tabApp').setAttribute('aria-pressed', onApp); $('tabHome').setAttribute('aria-pressed', !onApp);
+
+    // 清單
+    $('listHead').textContent = `清單（${S.items.length} 筆，左滑可刪除）`;
+    const list = $('list'); list.replaceChildren();
+    if (!S.items.length) list.append(el('div', 'cell empty', '還沒有東西'));
+    S.items.forEach((t, i) => list.append(makeRow(t, i)));
+    $('addBtn').disabled = !$('newText').value.trim();
+
+    // 診斷區
+    const nmap = { authorized: [true, '已允許'], denied: [false, '被拒絕（到 設定 > 通知 > 懶人待辦 打開）'], notDetermined: [false, '還沒問過（按下面「10 秒後提醒我」）'] };
+    const [nOk, nText] = nmap[S.notif];
+    const diag = $('diag'); diag.replaceChildren(
+      diagRow(S.appGroup, 'App Group 容器', S.appGroup ? '/private/var/mobile/Containers/Shared/AppGroup/7F3A2C10-…' : 'nil（簽名時 App Group 沒有帶到）'),
+      diagRow(true, 'App Group UserDefaults 寫入讀回', '寫入後讀回一致'),
+      diagRow(!S.bundleChanged, 'Bundle ID', S.bundleChanged ? 'com.flare.lazytodo.x7k2' : 'com.mrhai.lazytodo'),
+      diagRow(nOk, '通知權限', nText)
+    );
+    const re = el('button', 'cell tint', '重新檢查'); re.type = 'button';
+    re.addEventListener('click', () => { render(); say('重新檢查完了，結果跟上面一樣。'); });
+    diag.append(re);
+    $('diagFoot').textContent = 'App Group：group.com.mrhai.lazytodo\n預期 Bundle ID：com.mrhai.lazytodo';
+
+    // 通知區
+    const msg = $('remindMsg');
+    msg.hidden = !S.remindMsg;
+    msg.textContent = S.remindMsg + (S.timer ? `（還剩 ${S.left} 秒）` : '');
+    $('lastAction').textContent = `上次收到：${S.lastAction || '（還沒有）'}`;
+
+    // 小工具
+    fillWidget($('wSmall')); fillWidget($('wMedium'));
+
+    // 控制台
+    $('agOk').setAttribute('aria-pressed', S.appGroup); $('agBad').setAttribute('aria-pressed', !S.appGroup);
+    $('bidOk').setAttribute('aria-pressed', !S.bundleChanged); $('bidBad').setAttribute('aria-pressed', S.bundleChanged);
+    $('d10').setAttribute('aria-pressed', S.delay === 10); $('d3').setAttribute('aria-pressed', S.delay === 3);
+    $('pressBanner').hidden = $('banner').hidden;
+  }
+
+  function go(screen) { S.screen = screen; render(); }
+
+  // ---------- 新增 ----------
+  function addItem() {
+    const t = $('newText').value.trim(); if (!t) return;
+    S.items.unshift(t); $('newText').value = '';
+    say(S.appGroup ? `新增「${t}」，存進 App Group，也通知小工具重新整理。` : `新增「${t}」。App 自己看得到，但 App Group 壞了，小工具讀不到。`);
+    render();
+  }
+  $('addBtn').addEventListener('click', addItem);
+  $('newText').addEventListener('keydown', (e) => { if (e.key === 'Enter') addItem(); });
+  $('newText').addEventListener('input', () => { $('addBtn').disabled = !$('newText').value.trim(); });
+
+  // ---------- 通知 ----------
+  function schedule() {
+    clearInterval(S.timer); S.timer = null;
+    if (S.notif !== 'authorized') { S.remindMsg = '❌ 沒有通知權限，請到「設定 > 通知 > 懶人待辦」打開'; say('沒有權限，所以通知排不進去。按右邊「重設通知權限」可以再試一次。'); render(); return; }
+    S.remindMsg = `✅ 已排好，${S.delay} 秒後會跳通知（可以先回桌面等）`;
+    S.left = S.delay;
+    say(`通知排好了，${S.delay} 秒後會跳出來。可以先切到桌面等。`);
+    S.timer = setInterval(() => {
+      S.left -= 1;
+      if (S.left <= 0) { clearInterval(S.timer); S.timer = null; showBanner(); }
+      render();
+    }, 1000);
+    render();
+  }
+  $('remindBtn').addEventListener('click', () => {
+    if (S.notif === 'notDetermined') { $('perm').hidden = false; say('第一次按，iPhone 會先問要不要允許通知。'); $('permYes').focus(); return; }
+    schedule();
+  });
+  $('permYes').addEventListener('click', () => { S.notif = 'authorized'; $('perm').hidden = true; schedule(); });
+  $('permNo').addEventListener('click', () => { S.notif = 'denied'; $('perm').hidden = true; schedule(); });
+
+  function showBanner() {
+    const b = $('banner'); b.hidden = false; b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
+    S.remindMsg = '';
+    say('通知跳出來了！按住通知不放，會出現兩個按鈕。只按一下的話，會直接打開 App。');
+    render();
+  }
+  function hideBanner() { $('banner').hidden = true; render(); }
+  function record(name) { S.lastAction = `${name}（${stamp()}）`; }
+
+  function openActions() { $('banner').hidden = true; $('actions').hidden = false; $('actDone').focus(); render(); say('長按成功，選一個按鈕。點旁邊空白處會關掉。'); }
+  function closeActions() { $('actions').hidden = true; }
+
+  let lp = null, opened = false;
+  const banner = $('banner');
+  banner.addEventListener('pointerdown', () => { opened = false; clearTimeout(lp); lp = setTimeout(() => { opened = true; openActions(); }, 450); });
+  banner.addEventListener('pointerup', () => {
+    clearTimeout(lp);
+    if (!opened) { record('點了通知本身（沒有按按鈕）'); hideBanner(); go('app'); say('只點了一下通知，App 被打開，記錄成「點了通知本身」。'); }
+  });
+  banner.addEventListener('pointerleave', () => clearTimeout(lp));
+  banner.addEventListener('contextmenu', (e) => e.preventDefault());
+  banner.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openActions(); } });
+  $('pressBanner').addEventListener('click', openActions);
+
+  function pick(name) {
+    record(name); closeActions(); render();
+    say(`按了「${name}」。App 在背景收到，不會自己打開；切回 App 看「上次收到」。`);
+  }
+  $('actDone').addEventListener('click', () => pick('做完了'));
+  $('actSnooze').addEventListener('click', () => pick('明天再說'));
+  $('actions').addEventListener('click', (e) => { if (e.target === $('actions')) { closeActions(); render(); say('沒有按按鈕就關掉了，App 不會收到任何東西（真機上通知會留在通知中心）。'); } });
+
+  // ---------- 畫面切換 ----------
+  $('tabApp').addEventListener('click', () => go('app'));
+  $('tabHome').addEventListener('click', () => go('home'));
+  $('homeBar').addEventListener('click', () => { go('home'); say('回到桌面。小工具顯示的是 App Group 裡最新 3 筆。'); });
+  $('openApp').addEventListener('click', () => { go('app'); say('打開 App，畫面會重新讀一次資料。'); });
+
+  // ---------- 控制台 ----------
+  $('agOk').addEventListener('click', () => { S.appGroup = true; render(); say('App Group 正常：診斷區第一行 ✅，小工具讀得到資料。'); });
+  $('agBad').addEventListener('click', () => { S.appGroup = false; render(); say('假裝 App Group 被簽名弄壞：診斷區第一行變 ❌，小工具顯示「讀不到 App 資料」。切到桌面看看。'); });
+  $('bidOk').addEventListener('click', () => { S.bundleChanged = false; render(); say('Bundle ID 維持 com.mrhai.lazytodo。'); });
+  $('bidBad').addEventListener('click', () => { S.bundleChanged = true; render(); say('假裝簽名工具改了 Bundle ID：診斷區那一行變 ❌，會顯示被改成什麼。'); });
+  $('d10').addEventListener('click', () => { S.delay = 10; render(); });
+  $('d3').addEventListener('click', () => { S.delay = 3; render(); });
+  $('resetPerm').addEventListener('click', () => { S.notif = 'notDetermined'; render(); say('通知權限回到「還沒問過」，再按一次「10 秒後提醒我」會重新詢問。'); });
+  $('clearAll').addEventListener('click', () => { S.items = []; render(); say('清單清空了，小工具會顯示「還沒有東西」。'); });
+  $('sample').addEventListener('click', () => { S.items = SAMPLE.slice(); render(); say('放回三筆範例資料。'); });
+
+  tickClock(); setInterval(tickClock, 30000);
+  render();
+})();
+</script>
