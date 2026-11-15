@@ -1,0 +1,53 @@
+# XcodeGen 設定：CI 上執行 `xcodegen generate` 產生 LazyTodo.xcodeproj（.xcodeproj 不提交）
+name: LazyTodo
+
+options:
+  bundleIdPrefix: com.mrhai
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  LazyTodo:
+    type: application
+    platform: iOS
+    sources:
+      - path: LazyTodo
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: LazyTodo
+        PRODUCT_BUNDLE_IDENTIFIER: com.mrhai.lazytodo
+        INFOPLIST_FILE: Config/LazyTodo-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/LazyTodo.entitlements
+    dependencies:
+      # App 依賴小工具，並把 LazyTodoWidget.appex 內嵌到 LazyTodo.app/PlugIns
+      - target: LazyTodoWidget
+        embed: true
+    scheme: {}
+
+  LazyTodoWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: LazyTodoWidget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: LazyTodoWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.mrhai.lazytodo.widget
+        INFOPLIST_FILE: Config/LazyTodoWidget-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/LazyTodoWidget.entitlements
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"

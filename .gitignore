@@ -1,0 +1,15 @@
+# XcodeGen 產生的專案檔（不提交）
+*.xcodeproj/
+*.xcworkspace/
+
+# 編譯產物
+build/
+DerivedData/
+Payload/
+*.ipa
+*.xcarchive/
+
+# Xcode／macOS 雜項
+xcuserdata/
+*.xcuserstate
+.DS_Store

@@ -1,0 +1,89 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      ARCHIVE_PATH: build/LazyTodo.xcarchive
+      APP_PATH: build/LazyTodo.xcarchive/Products/Applications/LazyTodo.app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project LazyTodo.xcodeproj \
+            -scheme LazyTodo \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Check widget is embedded
+        run: |
+          set -e
+          echo "== .app 內容 =="
+          ls -la "$APP_PATH" || true
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::找不到 $APP_PATH"
+            exit 1
+          fi
+          APPEX="$APP_PATH/PlugIns/LazyTodoWidget.appex"
+          if [ ! -d "$APPEX" ] || [ ! -f "$APPEX/LazyTodoWidget" ]; then
+            echo "::error::LazyTodoWidget.appex 不在 LazyTodo.app/PlugIns 裡（小工具沒有被內嵌）"
+            ls -la "$APP_PATH/PlugIns" || true
+            exit 1
+          fi
+          echo "== appex Info.plist =="
+          plutil -p "$APPEX/Info.plist"
+          echo "✅ 小工具已內嵌"
+
+      # 因為 CODE_SIGNING_ALLOWED=NO，Xcode 不會把 entitlements 放進執行檔。
+      # 這裡用「臨時簽名」（ad-hoc，不需要任何憑證）把 entitlements 帶進去，
+      # 第三方簽名工具重簽時才讀得到 App Group。之後一樣會被使用者的憑證重新簽名。
+      - name: Embed entitlements (ad-hoc, no certificate)
+        run: |
+          set -e
+          APPEX="$APP_PATH/PlugIns/LazyTodoWidget.appex"
+          codesign --force --sign - --entitlements Config/LazyTodoWidget.entitlements "$APPEX"
+          codesign --force --sign - --entitlements Config/LazyTodo.entitlements "$APP_PATH"
+          echo "== App entitlements =="
+          codesign -d --entitlements - "$APP_PATH"
+          echo "== Widget entitlements =="
+          codesign -d --entitlements - "$APPEX"
+
+      - name: Package IPA
+        run: |
+          set -e
+          rm -rf Payload LazyTodo-unsigned.ipa
+          mkdir Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry LazyTodo-unsigned.ipa Payload
+          ls -la LazyTodo-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: LazyTodo-unsigned-ipa
+          path: LazyTodo-unsigned.ipa
+          if-no-files-found: error
