@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -87,3 +90,8 @@ jobs:
           name: LazyTodo-unsigned-ipa
           path: LazyTodo-unsigned.ipa
           if-no-files-found: error
+
+      - name: Publish to private Feather source
+        uses: mrhaibaoseal-lang/feather-source@main
+        with:
+          ipa: LazyTodo-unsigned.ipa
